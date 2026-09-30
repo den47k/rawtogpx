@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; let an in-progress one finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint and test
+        run: |
+          npm run lint
+          npm test
+
+      # Project sites live at /<repo>/; a <user>.github.io repo is served from /.
+      - name: Work out base path
+        id: base
+        run: |
+          repo="${{ github.event.repository.name }}"
+          if [[ "$repo" == *.github.io ]]; then echo "path=/" >> "$GITHUB_OUTPUT"; else echo "path=/$repo/" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Build
+        run: npm run build
+        env:
+          BASE_PATH: ${{ steps.base.outputs.path }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
