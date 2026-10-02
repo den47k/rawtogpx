@@ -1,14 +1,16 @@
 import 'leaflet/dist/leaflet.css';
-import { latLngBounds, type LatLngExpression } from 'leaflet';
-import { useEffect } from 'react';
+import { divIcon, latLngBounds, type LatLngExpression } from 'leaflet';
+import { useEffect, useRef } from 'react';
 import {
   CircleMarker,
   MapContainer,
+  Marker,
   Pane,
   Polyline,
   TileLayer,
   Tooltip,
   useMap,
+  useMapEvents,
 } from 'react-leaflet';
 import { formatDistance, formatDuration, formatPace } from '../../core/format.ts';
 import type { SplitSegment } from '../../core/segments.ts';
@@ -19,18 +21,42 @@ interface RouteMapProps {
   route: PreparedRoute | null;
   segments: SplitSegment[] | null;
   scale: PaceScale | null;
+  /** The view refits to the route only when this changes (a new file or track location). */
+  fitKey: unknown;
+  /** When set, clicking the map picks a location (track placement). */
+  onPick?: ((lat: number, lon: number) => void) | undefined;
+  /** Shown over the map while there is no route. */
+  emptyMessage: string;
 }
 
 const ROUTE_GRAY = '#707070';
+const REST_ICON = divIcon({ className: 'rest-marker', html: '‖', iconSize: [20, 20] });
 const toLatLngs = (pts: RoutePoint[]): LatLngExpression[] => pts.map((p) => [p.lat, p.lon]);
 
-/** Fit the view to the route whenever a new one is loaded. */
-function FitBounds({ route }: { route: PreparedRoute | null }) {
+/**
+ * Fit the view to the route when `fitKey` changes or a route first appears, not on every
+ * edit of the same route (e.g. turning the track's heading).
+ */
+function FitBounds({ route, fitKey }: { route: PreparedRoute | null; fitKey: unknown }) {
   const map = useMap();
+  const hasRoute = route !== null;
+  const routeRef = useRef(route);
   useEffect(() => {
-    if (!route) return;
-    map.fitBounds(latLngBounds(route.points.map((p) => [p.lat, p.lon])), { padding: [24, 24] });
-  }, [map, route]);
+    routeRef.current = route;
+  });
+  useEffect(() => {
+    const r = routeRef.current;
+    if (!r) return;
+    map.fitBounds(latLngBounds(r.points.map((p) => [p.lat, p.lon])), {
+      padding: [24, 24],
+      maxZoom: 17,
+    });
+  }, [map, fitKey, hasRoute]);
+  return null;
+}
+
+function ClickToPick({ onPick }: { onPick: (lat: number, lon: number) => void }) {
+  useMapEvents({ click: (e) => onPick(e.latlng.lat, e.latlng.lng) });
   return null;
 }
 
@@ -45,12 +71,14 @@ function TrackContainerSize() {
   return null;
 }
 
-export function RouteMap({ route, segments, scale }: RouteMapProps) {
+export function RouteMap({ route, segments, scale, fitKey, onPick, emptyMessage }: RouteMapProps) {
   const first = route?.points[0];
   const last = route?.points[route.points.length - 1];
 
   return (
-    <div className="relative h-full min-h-0 overflow-hidden rounded-lg">
+    <div
+      className={`relative h-full min-h-0 overflow-hidden rounded-lg ${onPick ? 'map-picking' : ''}`}
+    >
       <MapContainer
         center={[30, 10]}
         zoom={2}
@@ -62,7 +90,8 @@ export function RouteMap({ route, segments, scale }: RouteMapProps) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           maxZoom={19}
         />
-        <FitBounds route={route} />
+        <FitBounds route={route} fitKey={fitKey} />
+        {onPick && <ClickToPick onPick={onPick} />}
         <TrackContainerSize />
 
         {/* Panes fix stacking regardless of render order: casing < route (400) < endpoints. */}
@@ -82,24 +111,33 @@ export function RouteMap({ route, segments, scale }: RouteMapProps) {
             pathOptions={{ color: ROUTE_GRAY, weight: 5 }}
           />
         )}
-        {segments?.map((s) => (
-          <Polyline
-            key={s.index}
-            positions={toLatLngs(s.points)}
-            pathOptions={{
-              color: scale?.color(s.paceSPerKm) ?? ROUTE_GRAY,
-              weight: 5,
-              lineCap: 'butt',
-            }}
-          >
-            <Tooltip sticky>
-              <strong>Split {s.index + 1}</strong> · {formatDistance(s.fromM)}–
-              {formatDistance(s.toM)}
-              <br />
-              {formatDuration(s.lapS, s.lapS % 1 ? 1 : 0)} · {formatPace(s.paceSPerKm)}
-            </Tooltip>
-          </Polyline>
-        ))}
+        {segments
+          ?.filter((s) => s.rest)
+          .map((s) => (
+            <Marker key={s.index} position={toLatLngs(s.points)[0]!} icon={REST_ICON}>
+              <Tooltip>Rest {formatDuration(s.lapS, s.lapS % 1 ? 1 : 0)}</Tooltip>
+            </Marker>
+          ))}
+        {segments
+          ?.filter((s) => !s.rest)
+          .map((s) => (
+            <Polyline
+              key={s.index}
+              positions={toLatLngs(s.points)}
+              pathOptions={{
+                color: scale?.color(s.paceSPerKm) ?? ROUTE_GRAY,
+                weight: 5,
+                lineCap: 'butt',
+              }}
+            >
+              <Tooltip sticky>
+                <strong>{s.label ?? `Split ${s.index + 1}`}</strong> · {formatDistance(s.fromM)}–
+                {formatDistance(s.toM)}
+                <br />
+                {formatDuration(s.lapS, s.lapS % 1 ? 1 : 0)} · {formatPace(s.paceSPerKm)}
+              </Tooltip>
+            </Polyline>
+          ))}
 
         <Pane name="endpoints" style={{ zIndex: 450 }}>
           {first && (
@@ -126,7 +164,7 @@ export function RouteMap({ route, segments, scale }: RouteMapProps) {
       {!route && (
         <div className="pointer-events-none absolute inset-0 z-[500] flex items-center justify-center">
           <p className="rounded-lg bg-white/90 px-4 py-2 text-sm text-slate-600 shadow dark:bg-slate-900/90 dark:text-slate-300">
-            Load a route to preview it here.
+            {emptyMessage}
           </p>
         </div>
       )}

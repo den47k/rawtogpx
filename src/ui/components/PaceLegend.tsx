@@ -17,7 +17,7 @@ function Marker({ fill, ring, label }: { fill: string; ring: string; label: stri
 }
 
 /** Explains the map: pace colours (relative to average) and start/finish markers. */
-export function PaceLegend({ scale }: { scale: PaceScale | null }) {
+export function PaceLegend({ scale, hasRests }: { scale: PaceScale | null; hasRests: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-600 dark:text-slate-300">
       {scale && (
@@ -32,6 +32,17 @@ export function PaceLegend({ scale }: { scale: PaceScale | null }) {
       )}
       <Marker fill="#ffffff" ring="#111827" label="Start" />
       <Marker fill="#111827" ring="#ffffff" label="Finish" />
+      {hasRests && (
+        <span className="inline-flex items-center gap-1.5">
+          <span
+            aria-hidden
+            className="inline-flex size-4 items-center justify-center rounded-full bg-gray-700 text-[9px] font-bold text-white ring-1 ring-slate-400"
+          >
+            ‖
+          </span>
+          Rest
+        </span>
+      )}
     </div>
   );
 }

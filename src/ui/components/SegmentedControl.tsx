@@ -34,7 +34,7 @@ export function SegmentedControl<T extends string>({
               onChange={() => onChange(o.value)}
               className="peer sr-only"
             />
-            <span className="flex min-h-11 cursor-pointer items-center justify-center rounded-md px-3 text-sm font-medium text-slate-600 transition peer-checked:bg-white peer-checked:text-slate-900 peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-orange-500 md:min-h-8 dark:text-slate-300 dark:peer-checked:bg-slate-950 dark:peer-checked:text-white">
+            <span className="flex min-h-11 cursor-pointer items-center justify-center rounded-md px-3 whitespace-nowrap text-sm font-medium text-slate-600 transition peer-checked:bg-white peer-checked:text-slate-900 peer-checked:shadow-sm peer-focus-visible:ring-2 peer-focus-visible:ring-orange-500 md:min-h-8 dark:text-slate-300 dark:peer-checked:bg-slate-950 dark:peer-checked:text-white">
               {o.label}
             </span>
           </label>

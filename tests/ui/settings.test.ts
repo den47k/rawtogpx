@@ -25,6 +25,9 @@ describe('settings', () => {
       lapText: '400m',
       mismatch: 'trim',
       sampleIntervalS: 2.5,
+      format: 'tcx',
+      routeSource: 'track',
+      trackLengthM: 250,
     };
     saveSettings(s, settings);
     expect(loadSettings(s)).toEqual(settings);
@@ -35,10 +38,13 @@ describe('settings', () => {
     saveSettings(s, DEFAULT_SETTINGS);
     expect(Object.keys(JSON.parse(s.data.get('gpx-rebuilder:settings:v1')!)).sort()).toEqual([
       'anchorKind',
+      'format',
       'lapText',
       'mismatch',
+      'routeSource',
       'sampleIntervalS',
       'splitMode',
+      'trackLengthM',
     ]);
   });
 
@@ -58,11 +64,15 @@ describe('settings', () => {
       lapText: 5,
       mismatch: 'trim',
       sampleIntervalS: 0,
+      format: 'fit',
+      routeSource: 'track',
+      trackLengthM: 300,
     });
     expect(loadSettings(memory(raw))).toEqual({
       ...DEFAULT_SETTINGS,
       anchorKind: 'start',
       mismatch: 'trim',
+      routeSource: 'track',
     });
   });
 

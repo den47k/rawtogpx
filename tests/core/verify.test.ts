@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { EARTH_RADIUS_M } from '../../src/core/geo.ts';
 import { serializeGpx } from '../../src/core/serializeGpx.ts';
 import type { TimedPoint } from '../../src/core/types.ts';
-import { verifyGpx } from '../../src/core/verify.ts';
+import { verifyFile } from '../../src/core/verify.ts';
 
 const DEG_M = (Math.PI / 180) * EARTH_RADIUS_M;
 const T0 = Date.parse('2026-09-30T15:00:00Z');
@@ -16,9 +16,9 @@ function track(seconds: number): string {
   return serializeGpx(pts, { name: 'test' });
 }
 
-describe('verifyGpx', () => {
+describe('verifyFile', () => {
   it('interpolates the crossing time and reports totals', () => {
-    const r = verifyGpx(track(200), [
+    const r = verifyFile(track(200), [
       { distanceM: 502.5, timeS: 100.5 },
       { distanceM: 1000, timeS: 202 },
     ]);
@@ -38,12 +38,12 @@ describe('verifyGpx', () => {
   });
 
   it('reports null for distances the track never reaches', () => {
-    const r = verifyGpx(track(10), [{ distanceM: 1000, timeS: 200 }]);
+    const r = verifyFile(track(10), [{ distanceM: 1000, timeS: 200 }]);
     expect(r.ok && r.value.splits[0]!.fileS).toBeNull();
   });
 
   it('rejects points without time', () => {
-    const r = verifyGpx('<gpx><trk><trkseg><trkpt lat="1" lon="1"/></trkseg></trk></gpx>', [
+    const r = verifyFile('<gpx><trk><trkseg><trkpt lat="1" lon="1"/></trkseg></trk></gpx>', [
       { distanceM: 1, timeS: 1 },
     ]);
     expect(r.ok).toBe(false);

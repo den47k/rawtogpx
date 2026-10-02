@@ -1,1 +1,20 @@
 @import 'tailwindcss';
+
+/* Track placement: a crosshair says "click to place". */
+.map-picking .leaflet-container {
+  cursor: crosshair;
+}
+
+/* Rest marker on the map: a neutral pause glyph. */
+.rest-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #ffffff;
+  border-radius: 9999px;
+  background: #374151;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+}

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { formatDistance, formatDuration, formatPace } from '../../core/format.ts';
 import type { RunOutput } from '../../core/pipeline.ts';
+import { restSeconds } from '../../core/segments.ts';
 import { formatClock } from '../lib/datetime.ts';
 import { Card } from './Card.tsx';
 
@@ -21,6 +22,10 @@ function Stat({ label, children }: { label: string; children: ReactNode }) {
 export function Summary({ output, hasRoute }: SummaryProps) {
   const { parsed, timing, result, error } = output;
   const stated = parsed.splits[parsed.splits.length - 1]?.distanceM;
+  const rest = restSeconds(parsed.splits);
+  // Only worth showing when the route differs by more than rounding (half a metre).
+  const differs =
+    result !== null && stated !== undefined && Math.abs(result.routeLengthM - stated) > 0.5;
   const missing = [
     !hasRoute && 'a route',
     stated === undefined && 'valid splits',
@@ -38,17 +43,26 @@ export function Summary({ output, hasRoute }: SummaryProps) {
       )}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm empty:hidden">
         {stated !== undefined && (
-          <Stat label={result ? 'Stated → route distance' : 'Stated distance'}>
+          <Stat label={differs ? 'Stated → route distance' : 'Distance'}>
             {formatDistance(stated, 3)}
-            {result && result.routeLengthM !== stated && (
-              <> → {formatDistance(result.route.lengthM, 3)}</>
+            {result && differs && <> → {formatDistance(result.route.lengthM, 3)}</>}
+          </Stat>
+        )}
+        {timing && (
+          <Stat label={rest > 0 ? 'Total time (incl. rests)' : 'Total time'}>
+            {formatDuration(timing.totalS, timing.totalS % 1 ? 1 : 0)}
+            {rest > 0 && (
+              <span className="ml-1 text-xs font-normal text-slate-500 dark:text-slate-400">
+                {formatDuration(rest)} rest
+              </span>
             )}
           </Stat>
         )}
         {timing && (
-          <Stat label="Total time">{formatDuration(timing.totalS, timing.totalS % 1 ? 1 : 0)}</Stat>
+          <Stat label={rest > 0 ? 'Moving pace' : 'Average pace'}>
+            {formatPace((timing.totalS - rest) / (stated! / 1000))}
+          </Stat>
         )}
-        {timing && <Stat label="Average pace">{formatPace(timing.totalS / (stated! / 1000))}</Stat>}
         {timing && (
           <Stat label="Start → finish">
             {formatClock(timing.startMs)} → {formatClock(timing.endMs, timing.startMs)}

@@ -6,10 +6,13 @@ export interface SplitSegment {
   /** Stated (input) distances, for labels. */
   fromM: number;
   toM: number;
-  /** Seconds for this split and its pace in seconds per stated km. */
+  /** Seconds for this split and its pace in seconds per stated km (NaN for a rest). */
   lapS: number;
   paceSPerKm: number;
-  /** The part of the route this split covers. */
+  rest: boolean;
+  /** Interval-block label ("Rep 3/6", "Recovery"), if any. */
+  label?: string;
+  /** The part of the route this split covers; for a rest, the single spot. */
   points: RoutePoint[];
 }
 
@@ -36,13 +39,35 @@ export function splitSegments(
     const prevStated = i > 0 ? stated[i - 1]! : { distanceM: 0, timeS: 0 };
     const fromPlaced = i > 0 ? placed[i - 1]!.distanceM : 0;
     const lapS = s.timeS - prevStated.timeS;
-    return {
+    const rest = s.rest === true;
+    const segment: SplitSegment = {
       index: i,
       fromM: prevStated.distanceM,
       toM: s.distanceM,
       lapS,
-      paceSPerKm: lapS / ((s.distanceM - prevStated.distanceM) / 1000),
-      points: subRoute(route, fromPlaced, placed[i]!.distanceM),
+      paceSPerKm: rest ? NaN : lapS / ((s.distanceM - prevStated.distanceM) / 1000),
+      rest,
+      points: rest
+        ? [pointAtDistance(route, fromPlaced)]
+        : subRoute(route, fromPlaced, placed[i]!.distanceM),
     };
+    if (s.label !== undefined) segment.label = s.label;
+    return segment;
   });
+}
+
+/** Pace of each split in seconds per km; NaN for rests. */
+export function splitPaces(splits: Split[]): number[] {
+  return splits.map((s, i) => {
+    const prev = i > 0 ? splits[i - 1]! : { distanceM: 0, timeS: 0 };
+    return s.rest ? NaN : (s.timeS - prev.timeS) / ((s.distanceM - prev.distanceM) / 1000);
+  });
+}
+
+/** Total time spent in rests, seconds. */
+export function restSeconds(splits: Split[]): number {
+  return splits.reduce(
+    (sum, s, i) => (s.rest ? sum + s.timeS - (i > 0 ? splits[i - 1]!.timeS : 0) : sum),
+    0,
+  );
 }

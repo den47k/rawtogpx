@@ -1,5 +1,5 @@
 import { cumulativeDistances, lowerBound } from './geo.ts';
-import { parseGpxPoints } from './parseRoute.ts';
+import { parseTrackFile } from './parseRoute.ts';
 import { err, ok, type Result, type Split } from './types.ts';
 
 /** Splits whose file time differs from the input by more than this are flagged. */
@@ -10,6 +10,20 @@ export const VERIFY_TOLERANCE_S = 1;
  * targets this close past the end count as reached at the final point.
  */
 const END_TOLERANCE_M = 0.5;
+
+/**
+ * A rest matches the nearest stretch of standing still (identical positions) within this
+ * many metres, or this fraction of its distance (the mismatch-warning threshold).
+ */
+const REST_MATCH_M = 2;
+const REST_MATCH_RATIO = 0.02;
+
+/** A run of consecutive points at one position: a rest in the file. */
+interface Hold {
+  distanceM: number;
+  first: number;
+  last: number;
+}
 
 export interface VerifiedSplit {
   distanceM: number;
@@ -30,11 +44,12 @@ export interface Verification {
 }
 
 /**
- * Re-parse a generated GPX string (not the in-memory points) and measure, for each split
- * distance, the elapsed time at which the track reaches it.
+ * Re-parse a generated GPX or TCX string (not the in-memory points) and measure, for each
+ * split distance, the elapsed time at which the track reaches it. For a rest, the time the
+ * track leaves that spot. A split that ends where a rest begins is timed on arrival.
  */
-export function verifyGpx(gpx: string, splits: Split[]): Result<Verification> {
-  const parsed = parseGpxPoints(gpx);
+export function verifyFile(text: string, splits: Split[]): Result<Verification> {
+  const parsed = parseTrackFile(text);
   if (!parsed.ok) return parsed;
   const points = parsed.value;
   const times: number[] = [];
@@ -50,13 +65,35 @@ export function verifyGpx(gpx: string, splits: Split[]): Result<Verification> {
   const endMs = times[times.length - 1]!;
   const total = cum[cum.length - 1]!;
 
+  const holds: Hold[] = [];
+  for (let i = 1; i < points.length; i++) {
+    if (cum[i] !== cum[i - 1]) continue;
+    const h = holds[holds.length - 1];
+    if (h && h.last === i - 1) h.last = i;
+    else holds.push({ distanceM: cum[i]!, first: i - 1, last: i });
+  }
+  const elapsed = (i: number): number => (times[i]! - startMs) / 1000;
+
   const rows = splits.map((s): VerifiedSplit => {
+    // A rest is timed when the track leaves its stop. A split ending exactly where a stop
+    // begins is timed on arrival; otherwise splits are timed where the track crosses their
+    // stated distance, as Strava measures them.
+    const reach = s.rest ? Math.max(REST_MATCH_M, REST_MATCH_RATIO * s.distanceM) : END_TOLERANCE_M;
+    let hold: Hold | undefined;
+    for (const h of holds) {
+      const d = Math.abs(h.distanceM - s.distanceM);
+      if (d <= reach && (!hold || d < Math.abs(hold.distanceM - s.distanceM))) hold = h;
+    }
     // The first point at or past the target; interpolate within the crossing segment.
     const target =
       s.distanceM > total && s.distanceM - total <= END_TOLERANCE_M ? total : s.distanceM;
     const j = lowerBound(cum, target);
     let fileS: number | null = null;
-    if (j === 0) {
+    if (hold) {
+      fileS = elapsed(s.rest ? hold.last : hold.first);
+    } else if (s.rest) {
+      fileS = null; // the file never stands still here
+    } else if (j === 0) {
       fileS = 0;
     } else if (j < cum.length) {
       const d0 = cum[j - 1]!;

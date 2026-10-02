@@ -15,10 +15,18 @@ export interface PreparedRoute {
   hasElevation: boolean;
 }
 
-/** One cumulative split: the runner reached `distanceM` after `timeS` elapsed seconds. */
+/**
+ * One cumulative split: the runner reached `distanceM` after `timeS` elapsed seconds.
+ * A rest split stays at the previous distance while time advances (standing still).
+ */
 export interface Split {
   distanceM: number;
   timeS: number;
+  rest?: boolean;
+  /** Display name for interval-block parts, e.g. "Rep 3/6" or "Recovery". */
+  label?: string;
+  /** A moving recovery between reps (written as a resting lap in TCX). */
+  recovery?: boolean;
 }
 
 /** An output point with an absolute UTC timestamp in epoch milliseconds. */

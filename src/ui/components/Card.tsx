@@ -15,7 +15,9 @@ export function Card({ title, aside, className = '', children }: CardProps) {
       aria-labelledby={id}
       className={`rounded-xl border border-slate-200 bg-white p-3 shadow-sm lg:p-4 dark:border-slate-800 dark:bg-slate-900 ${className}`}
     >
-      <div className={`mb-2 flex items-center justify-between gap-2 ${aside ? 'min-h-9' : ''}`}>
+      <div
+        className={`mb-1.5 flex flex-wrap items-center justify-between gap-2 ${aside ? 'min-h-9' : ''}`}
+      >
         <h2
           id={id}
           className="text-sm font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400"

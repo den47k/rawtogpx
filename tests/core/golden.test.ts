@@ -5,7 +5,7 @@ import { parseRoute } from '../../src/core/parseRoute.ts';
 import { parseSplits } from '../../src/core/parseSplits.ts';
 import { rebuild } from '../../src/core/rebuild.ts';
 import { serializeGpx } from '../../src/core/serializeGpx.ts';
-import { verifyGpx } from '../../src/core/verify.ts';
+import { verifyFile } from '../../src/core/verify.ts';
 
 const fixture = readFileSync(new URL('../fixtures/5.37k.gpx', import.meta.url), 'utf8');
 const SPLITS = '1k 6:10, 2k 12:19, 3k 18:13, 4k 24:21, 5.37k 31:31';
@@ -27,7 +27,7 @@ describe('golden: 5.37k Kyiv route', () => {
   const { route, splits } = setup();
   const result = unwrap(rebuild(route, splits, ANCHOR, { mismatch: 'scale', sampleIntervalS: 1 }));
   const gpx = serializeGpx(result.points, { name: 'Evening Run' });
-  const check = unwrap(verifyGpx(gpx, splits));
+  const check = unwrap(verifyFile(gpx, splits));
 
   it('keeps all 159 points after dedupe', () => {
     expect(route.points).toHaveLength(159);
@@ -60,7 +60,7 @@ describe('golden: 5.37k Kyiv route', () => {
   });
 
   it('matches the scaled splits almost exactly', () => {
-    const scaled = unwrap(verifyGpx(gpx, result.splits));
+    const scaled = unwrap(verifyFile(gpx, result.splits));
     expect(scaled.allOk).toBe(true);
     for (const row of scaled.splits) expect(Math.abs(row.deltaS!)).toBeLessThan(0.01);
   });
@@ -85,7 +85,7 @@ describe('regression: why route vertices are kept', () => {
   it('uniform-only sampling cuts corners and loses more than 10 m', () => {
     const { route, splits } = setup();
     const uniform = unwrap(rebuild(route, splits, ANCHOR, { includeVertices: false }));
-    const check = unwrap(verifyGpx(serializeGpx(uniform.points, { name: 'x' }), splits));
+    const check = unwrap(verifyFile(serializeGpx(uniform.points, { name: 'x' }), splits));
     expect(route.lengthM - check.totalDistanceM).toBeGreaterThan(10);
   });
 });

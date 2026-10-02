@@ -16,8 +16,8 @@ export interface RebuildOptions {
   /** Spacing of the uniform time samples, seconds. */
   sampleIntervalS: number;
   /**
-   * Emit every route vertex (default true). Only disable to demonstrate why it matters:
-   * time-grid samples alone cut corners and shorten the track.
+   * Emit every route vertex and split boundary (default true). Only disable to demonstrate
+   * why it matters: time-grid samples alone cut corners and shorten the track.
    */
   includeVertices: boolean;
 }
@@ -61,7 +61,8 @@ export interface TimeModel {
 
 /**
  * Piecewise-linear distance/time model through (0, 0) and every split: pace is constant
- * within each split. Splits must be strictly increasing in both distance and time.
+ * within each split. Times strictly increase; distances increase except across a rest,
+ * where they hold. At a rest's distance, `timeAt` returns the time the runner leaves.
  */
 export function createTimeModel(splits: Split[]): TimeModel {
   const ds = [0, ...splits.map((s) => s.distanceM)];
@@ -70,6 +71,7 @@ export function createTimeModel(splits: Split[]): TimeModel {
     const i = segmentIndex(xs, x);
     const x0 = xs[i]!;
     const x1 = xs[i + 1]!;
+    if (x1 === x0) return ys[i + 1]!; // a trailing rest
     const f = Math.min(1, Math.max(0, (x - x0) / (x1 - x0)));
     return ys[i]! + (ys[i + 1]! - ys[i]!) * f;
   };
@@ -97,8 +99,9 @@ export function rebuild(
   for (let i = 0; i < splits.length; i++) {
     const prev = i > 0 ? splits[i - 1]! : { distanceM: 0, timeS: 0 };
     const s = splits[i]!;
-    if (!(s.distanceM > prev.distanceM) || !(s.timeS > prev.timeS)) {
-      return err('Split distances and times must strictly increase.');
+    const distanceOk = s.rest ? s.distanceM === prev.distanceM : s.distanceM > prev.distanceM;
+    if (!distanceOk || !(s.timeS > prev.timeS)) {
+      return err('Split distances and times must strictly increase (rests hold distance).');
     }
   }
   if (!Number.isFinite(opts.sampleIntervalS) || opts.sampleIntervalS <= 0) {
@@ -121,9 +124,11 @@ export function rebuild(
   let effective = splits;
   if (opts.mismatch === 'scale') {
     scale = L / D;
-    effective = splits.map((s) => ({ distanceM: s.distanceM * scale, timeS: s.timeS }));
-    // Make the last split land exactly on the route end despite rounding.
-    effective[effective.length - 1]!.distanceM = L;
+    // Splits at the final distance (including a trailing rest) land exactly on the route end.
+    effective = splits.map((s) => ({
+      ...s,
+      distanceM: s.distanceM === D ? L : s.distanceM * scale,
+    }));
   } else {
     if (D > L) {
       return err(
@@ -137,7 +142,8 @@ export function rebuild(
   const model = createTimeModel(effective);
   const totalMs = Math.round(model.totalS * 1000);
   const sampleCount = Math.floor(model.totalS / opts.sampleIntervalS) + 1;
-  if (sampleCount + (opts.includeVertices ? used.points.length : 0) > MAX_OUTPUT_POINTS) {
+  const exactCount = opts.includeVertices ? used.points.length + effective.length + 1 : 0;
+  if (sampleCount + exactCount > MAX_OUTPUT_POINTS) {
     return err('Too many output points; increase the sample interval.');
   }
 
@@ -150,16 +156,22 @@ export function rebuild(
     return out;
   };
 
-  // Source 1: every route vertex, timed by distance. Keeps the exact geometry of bends.
-  const vertices: TimedPoint[] = [];
+  // Source 1: exact points. Every route vertex, timed by distance, keeps the geometry of
+  // bends; every split boundary (start, each split, both ends of each rest) pins the
+  // stated times into the file regardless of the sample interval.
+  const exact: TimedPoint[] = [];
   if (opts.includeVertices) {
     used.points.forEach((p, i) => {
       const d = used.cum[i]!;
       const ms = i === used.points.length - 1 ? totalMs : Math.round(model.timeAt(d) * 1000);
       const out: TimedPoint = { lat: p.lat, lon: p.lon, timeMs: startMs + ms };
       if (used.hasElevation && p.ele !== undefined) out.ele = p.ele;
-      vertices.push(out);
+      exact.push(out);
     });
+    exact.push(at(0, 0));
+    for (const s of effective) exact.push(at(Math.round(s.timeS * 1000), s.distanceM));
+    // Stable: on equal times a vertex (pushed first) wins over a boundary point.
+    exact.sort((a, b) => a.timeMs - b.timeMs);
   }
 
   // Source 2: uniform time samples, positioned by distance. Keeps pace smooth for Strava.
@@ -172,12 +184,12 @@ export function rebuild(
     samples.push(at(totalMs, model.totalM));
   }
 
-  // Merge by time; on equal milliseconds keep the vertex and drop the sample.
+  // Merge by time; on equal milliseconds keep the exact point and drop the sample.
   const points: TimedPoint[] = [];
   let vi = 0;
   let si = 0;
-  while (vi < vertices.length || si < samples.length) {
-    const v = vertices[vi];
+  while (vi < exact.length || si < samples.length) {
+    const v = exact[vi];
     const s = samples[si];
     const next = s === undefined || (v !== undefined && v.timeMs <= s.timeMs) ? v! : s;
     if (next === v) vi++;

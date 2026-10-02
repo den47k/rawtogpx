@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { EARTH_RADIUS_M, haversine, prepareRoute } from '../../src/core/geo.ts';
-import { splitSegments, subRoute } from '../../src/core/segments.ts';
+import { restSeconds, splitPaces, splitSegments, subRoute } from '../../src/core/segments.ts';
 
 const DEG_M = (Math.PI / 180) * EARTH_RADIUS_M;
 const route = prepareRoute([0, 100, 200, 300, 400].map((d) => ({ lat: d / DEG_M, lon: 0 })));
@@ -36,5 +36,25 @@ describe('segments', () => {
     ]);
     expect(segs[1]!.paceSPerKm).toBeCloseTo(90 / 0.19, 9);
     expect(len(segs[0]!.points) + len(segs[1]!.points)).toBeCloseTo(400, 6);
+  });
+});
+
+describe('split stats', () => {
+  const splits = [
+    { distanceM: 1000, timeS: 300 },
+    { distanceM: 1000, timeS: 360, rest: true },
+    { distanceM: 2000, timeS: 690 },
+  ];
+
+  it('gives each split its pace and rests none', () => {
+    const p = splitPaces(splits);
+    expect(p[0]).toBe(300);
+    expect(p[1]).toBeNaN();
+    expect(p[2]).toBe(330);
+  });
+
+  it('adds up rest time', () => {
+    expect(restSeconds(splits)).toBe(60);
+    expect(restSeconds([{ distanceM: 0, timeS: 30, rest: true }])).toBe(30);
   });
 });

@@ -1,5 +1,6 @@
 import { formatDistance, formatDuration, formatPace } from '../../core/format.ts';
 import type { RunOutput } from '../../core/pipeline.ts';
+import { splitPaces } from '../../core/segments.ts';
 import { VERIFY_TOLERANCE_S } from '../../core/verify.ts';
 import { formatClock } from '../lib/datetime.ts';
 import type { PaceScale } from '../lib/paceColor.ts';
@@ -27,6 +28,7 @@ export function VerificationTable({ output, scale }: VerificationTableProps) {
     );
   }
   const decimals = splits.some((s) => s.timeS % 1 !== 0) ? 1 : 0;
+  const paces = splitPaces(splits);
   const failing = v?.splits.filter((r) => !r.ok).length ?? 0;
 
   return (
@@ -54,25 +56,48 @@ export function VerificationTable({ output, scale }: VerificationTableProps) {
         <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
           {splits.map((s, i) => {
             const prev = i > 0 ? splits[i - 1]! : { distanceM: 0, timeS: 0 };
-            const pace = (s.timeS - prev.timeS) / ((s.distanceM - prev.distanceM) / 1000);
+            const pace = paces[i]!;
             const row = v?.splits[i];
             const bad = row !== undefined && !row.ok;
             return (
               <tr key={i}>
                 <th scope="row" className="py-1.5 pr-3 text-left font-medium">
-                  <span className="inline-flex items-center gap-2">
-                    {scale && (
-                      <span
-                        aria-hidden
-                        className="inline-block h-1.5 w-4 rounded-full"
-                        style={{ background: scale.color(pace) }}
-                      />
-                    )}
-                    {formatDistance(s.distanceM)}
-                  </span>
+                  {s.rest ? (
+                    <span className="inline-flex items-center gap-2 text-slate-500 dark:text-slate-400">
+                      {scale && (
+                        <span
+                          aria-hidden
+                          className="inline-block w-4 text-center text-xs font-bold"
+                        >
+                          ‖
+                        </span>
+                      )}
+                      Rest {formatDuration(s.timeS - prev.timeS, decimals)}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2">
+                      {scale && (
+                        <span
+                          aria-hidden
+                          className="inline-block h-1.5 w-4 rounded-full"
+                          style={{ background: scale.color(pace) }}
+                        />
+                      )}
+                      {s.label === undefined ? (
+                        formatDistance(s.distanceM)
+                      ) : (
+                        <>
+                          {s.label}
+                          <span className="font-normal text-slate-500 dark:text-slate-400">
+                            {formatDistance(s.distanceM - prev.distanceM)}
+                          </span>
+                        </>
+                      )}
+                    </span>
+                  )}
                 </th>
                 <td className="py-1.5 pr-3 text-right text-slate-500 dark:text-slate-400">
-                  {formatPace(pace)}
+                  {s.rest ? '—' : formatPace(pace)}
                 </td>
                 <td className="py-1.5 pr-3 text-right">{formatDuration(s.timeS, decimals)}</td>
                 <td className="py-1.5 pr-3 text-right">
@@ -110,7 +135,7 @@ export function VerificationTable({ output, scale }: VerificationTableProps) {
           ) : (
             <>All splits within ±{VERIFY_TOLERANCE_S} s.</>
           )}
-          {result && result.scale !== 1 && (
+          {result && Math.abs(result.scale - 1) > 1e-4 && (
             <>
               {' '}
               Split distances were stretched ×{result.scale.toFixed(4)} to fit the route; times are

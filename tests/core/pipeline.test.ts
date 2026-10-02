@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { prepareRoute } from '../../src/core/geo.ts';
 import { parseRoute } from '../../src/core/parseRoute.ts';
 import { runPipeline, type RunInput } from '../../src/core/pipeline.ts';
-import { verifyGpx } from '../../src/core/verify.ts';
+import { verifyFile } from '../../src/core/verify.ts';
 
 const fixture = readFileSync(new URL('../fixtures/5.37k.gpx', import.meta.url), 'utf8');
 const parsed = parseRoute(fixture);
@@ -20,6 +20,7 @@ const base: RunInput = {
   sampleIntervalS: 1,
   activityName: '',
   timeZone: 'Europe/Kyiv',
+  format: 'gpx',
 };
 
 describe('runPipeline', () => {
@@ -33,9 +34,9 @@ describe('runPipeline', () => {
       startMs: Date.parse('2026-09-30T15:18:29Z'),
       endMs: Date.parse('2026-09-30T15:50:00Z'),
     });
-    expect(out.gpx).toContain('<name>Evening Run</name>');
-    const v = verifyGpx(
-      out.gpx!,
+    expect(out.fileText).toContain('<name>Evening Run</name>');
+    const v = verifyFile(
+      out.fileText!,
       [1000, 2000, 3000, 4000].map((d, i) => ({ distanceM: d, timeS: [370, 739, 1093, 1461][i]! })),
     );
     expect(v.ok && v.value.allOk).toBe(true);
@@ -51,19 +52,19 @@ describe('runPipeline', () => {
       splitMode: 'laps',
       lapDistanceM: 1000,
     });
-    expect(laps.gpx).toBe(runPipeline(base).gpx);
+    expect(laps.fileText).toBe(runPipeline(base).fileText);
   });
 
   it('uses a custom name, escaped', () => {
     const out = runPipeline({ ...base, activityName: '  Park <5k> & back ' });
     expect(out.name).toBe('Park <5k> & back');
-    expect(out.gpx).toContain('<name>Park &lt;5k&gt; &amp; back</name>');
+    expect(out.fileText).toContain('<name>Park &lt;5k&gt; &amp; back</name>');
   });
 
   it('derives timing without a route', () => {
     const out = runPipeline({ ...base, route: null, anchorKind: 'start' });
     expect(out.timing?.endMs).toBe(Date.parse('2026-09-30T16:21:31Z'));
-    expect(out.gpx).toBeNull();
+    expect(out.fileText).toBeNull();
     expect(out.error).toBeNull();
   });
 
@@ -71,14 +72,14 @@ describe('runPipeline', () => {
     const bad = runPipeline({ ...base, splitsText: '1k 6:10, 2k nope' });
     expect(bad.parsed.errors).toHaveLength(1);
     expect(bad.timing).toBeNull();
-    expect(bad.gpx).toBeNull();
+    expect(bad.fileText).toBeNull();
     expect(bad.filename).toBeNull();
-    expect(runPipeline({ ...base, anchorMs: undefined }).gpx).toBeNull();
+    expect(runPipeline({ ...base, anchorMs: undefined }).fileText).toBeNull();
   });
 
   it('surfaces rebuild errors', () => {
     const out = runPipeline({ ...base, splitsText: '6k 35:00', mismatch: 'trim' });
-    expect(out.gpx).toBeNull();
+    expect(out.fileText).toBeNull();
     expect(out.error).toMatch(/scale/);
   });
 });

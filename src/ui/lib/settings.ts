@@ -1,7 +1,9 @@
 import type { SplitMode } from '../../core/parseSplits.ts';
+import type { OutputFormat } from '../../core/pipeline.ts';
+import { TRACK_LENGTHS, type TrackLength } from '../../core/track.ts';
 import type { AnchorKind, MismatchMode } from '../../core/types.ts';
 
-/** Preferences remembered between visits. Never route data or splits. */
+/** Preferences remembered between visits. Never route data, track location, or splits. */
 export interface Settings {
   /** `auto` until the user picks a mode. */
   splitMode: SplitMode | 'auto';
@@ -9,7 +11,13 @@ export interface Settings {
   lapText: string;
   mismatch: MismatchMode;
   sampleIntervalS: number;
+  format: OutputFormat;
+  routeSource: RouteSource;
+  trackLengthM: TrackLength;
 }
+
+/** Where the route comes from: an uploaded file or a generated running track. */
+export type RouteSource = 'file' | 'track';
 
 export const DEFAULT_SETTINGS: Settings = {
   splitMode: 'auto',
@@ -17,6 +25,9 @@ export const DEFAULT_SETTINGS: Settings = {
   lapText: '',
   mismatch: 'scale',
   sampleIntervalS: 1,
+  format: 'gpx',
+  routeSource: 'file',
+  trackLengthM: 400,
 };
 
 export const SAMPLE_INTERVAL_MIN_S = 0.1;
@@ -53,6 +64,11 @@ export function loadSettings(storage: StorageLike | undefined): Settings {
       typeof r.sampleIntervalS === 'number' && isValidSampleInterval(r.sampleIntervalS)
         ? r.sampleIntervalS
         : d.sampleIntervalS,
+    format: oneOf(r.format, ['gpx', 'tcx'] as const, d.format),
+    routeSource: oneOf(r.routeSource, ['file', 'track'] as const, d.routeSource),
+    trackLengthM: TRACK_LENGTHS.includes(r.trackLengthM as TrackLength)
+      ? (r.trackLengthM as TrackLength)
+      : d.trackLengthM,
   };
 }
 

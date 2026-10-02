@@ -1,6 +1,7 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import type { SplitError, SplitMode } from '../../core/parseSplits.ts';
 import { Card } from './Card.tsx';
+import { IntervalBuilder } from './IntervalBuilder.tsx';
 import { SegmentedControl } from './SegmentedControl.tsx';
 
 interface SplitsInputProps {
@@ -24,8 +25,8 @@ const MODES = [
 ] as const;
 
 const HINT: Record<SplitMode, string> = {
-  cumulative: 'Distance and total elapsed time at each split.',
-  laps: 'Distance and time of each lap, or only times if a lap distance is set.',
+  cumulative: 'Distance and total elapsed time at each split',
+  laps: 'Distance and time of each lap (only times if you set a lap distance above)',
 };
 
 const PLACEHOLDER: Record<SplitMode, string> = {
@@ -40,17 +41,41 @@ export function SplitsInput(props: SplitsInputProps) {
   const errorsId = useId();
   const lapId = useId();
   const lapErrorId = useId();
+  const [building, setBuilding] = useState(false);
 
   return (
     <Card
       title="2 · Splits"
       aside={
-        <SegmentedControl
-          legend="Split mode"
-          value={mode}
-          options={MODES}
-          onChange={props.onMode}
-        />
+        <div className="flex items-center gap-2">
+          {mode === 'laps' && (
+            <>
+              <label htmlFor={lapId} className="sr-only">
+                Lap distance (optional)
+              </label>
+              <input
+                id={lapId}
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="lap: 1k?"
+                title="Optional lap distance: then each lap needs only a time"
+                value={props.lapText}
+                onChange={(e) => props.onLapText(e.target.value)}
+                aria-invalid={lapError ? true : undefined}
+                aria-describedby={lapError ? lapErrorId : undefined}
+                className="min-h-11 w-24 rounded-lg border border-slate-300 bg-white px-2 font-mono text-sm aria-invalid:border-red-400 md:min-h-9 dark:border-slate-700 dark:bg-slate-950"
+              />
+            </>
+          )}
+          <SegmentedControl
+            legend="Split mode"
+            value={mode}
+            options={MODES}
+            onChange={props.onMode}
+          />
+        </div>
       }
     >
       <div className="space-y-2">
@@ -67,27 +92,6 @@ export function SplitsInput(props: SplitsInputProps) {
           </p>
         )}
 
-        {mode === 'laps' && (
-          <div className="flex items-center gap-3">
-            <label htmlFor={lapId} className="text-sm font-medium">
-              Lap distance
-            </label>
-            <input
-              id={lapId}
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="e.g. 1k, 400m"
-              value={props.lapText}
-              onChange={(e) => props.onLapText(e.target.value)}
-              aria-invalid={lapError ? true : undefined}
-              aria-describedby={lapError ? lapErrorId : undefined}
-              className="min-h-11 w-32 rounded-lg border border-slate-300 bg-white px-3 font-mono text-sm md:min-h-9 dark:border-slate-700 dark:bg-slate-950"
-            />
-            <span className="text-xs text-slate-500 dark:text-slate-400">optional</span>
-          </div>
-        )}
         {mode === 'laps' && lapError && (
           <p id={lapErrorId} className="text-sm text-red-600 dark:text-red-400">
             {lapError}
@@ -102,7 +106,7 @@ export function SplitsInput(props: SplitsInputProps) {
             id={textId}
             value={text}
             onChange={(e) => props.onText(e.target.value)}
-            rows={5}
+            rows={3}
             spellCheck={false}
             autoComplete="off"
             autoCapitalize="off"
@@ -110,13 +114,29 @@ export function SplitsInput(props: SplitsInputProps) {
             placeholder={PLACEHOLDER[mode]}
             aria-invalid={errors.length > 0 ? true : undefined}
             aria-describedby={`${hintId} ${errorsId}`}
-            className="block w-full resize-y rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-sm leading-6 aria-invalid:border-red-400 dark:border-slate-700 dark:bg-slate-950"
+            className="block max-h-56 min-h-[5.25rem] w-full resize-y rounded-lg [field-sizing:content] border border-slate-300 bg-white px-3 py-2 font-mono text-sm leading-6 aria-invalid:border-red-400 dark:border-slate-700 dark:bg-slate-950"
           />
           <p id={hintId} className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-            {HINT[mode]} One per line, or separated by commas, semicolons or “ / ”.
-            {!props.modeIsManual && text.trim() !== '' && ' Mode was detected automatically.'}
+            {HINT[mode]}, one per line or comma-separated. Stops: “rest 1:30”.
+            {!props.modeIsManual && text.trim() !== '' && ' Mode auto-detected.'}{' '}
+            {!building && (
+              <button
+                type="button"
+                onClick={() => setBuilding(true)}
+                className="font-medium text-orange-600 underline dark:text-orange-400"
+              >
+                Add intervals…
+              </button>
+            )}
           </p>
         </div>
+
+        {building && (
+          <IntervalBuilder
+            onClose={() => setBuilding(false)}
+            onAdd={(line) => props.onText(text.trim() === '' ? line : `${text.trimEnd()}\n${line}`)}
+          />
+        )}
 
         <ul
           id={errorsId}

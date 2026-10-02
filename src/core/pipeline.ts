@@ -1,8 +1,16 @@
 import { parseSplits, type ParsedSplits, type SplitMode } from './parseSplits.ts';
 import { rebuild, type RebuildResult } from './rebuild.ts';
 import { defaultActivityName, defaultFilename, serializeGpx } from './serializeGpx.ts';
+import { serializeTcx } from './serializeTcx.ts';
 import type { AnchorKind, MismatchMode, PreparedRoute } from './types.ts';
-import { verifyGpx, type Verification } from './verify.ts';
+import { verifyFile, type Verification } from './verify.ts';
+
+export type OutputFormat = 'gpx' | 'tcx';
+
+export const MIME_TYPES: Record<OutputFormat, string> = {
+  gpx: 'application/gpx+xml',
+  tcx: 'application/vnd.garmin.tcx+xml',
+};
 
 export interface RunInput {
   route: PreparedRoute | null;
@@ -16,6 +24,7 @@ export interface RunInput {
   sampleIntervalS: number;
   /** User-chosen name; blank means the default from the start hour. */
   activityName: string;
+  format: OutputFormat;
   /** IANA zone for default name/filename; defaults to the runtime's zone. */
   timeZone?: string | undefined;
 }
@@ -33,7 +42,8 @@ export interface RunOutput {
   result: RebuildResult | null;
   /** Why no file could be built, when splits and route are otherwise present. */
   error: string | null;
-  gpx: string | null;
+  /** The generated file in the chosen format. */
+  fileText: string | null;
   verification: Verification | null;
   name: string;
   filename: string | null;
@@ -63,10 +73,10 @@ export function runPipeline(input: RunInput): RunOutput {
     timing,
     result: null,
     error: null,
-    gpx: null,
+    fileText: null,
     verification: null,
     name,
-    filename: timing ? defaultFilename(timing.startMs, 'gpx', input.timeZone) : null,
+    filename: timing ? defaultFilename(timing.startMs, input.format, input.timeZone) : null,
   };
   if (!input.route || !timing || parsed.splits.length === 0) return out;
 
@@ -78,12 +88,17 @@ export function runPipeline(input: RunInput): RunOutput {
   );
   if (!built.ok) return { ...out, error: built.error };
 
-  const gpx = serializeGpx(built.value.points, { name });
-  const verified = verifyGpx(gpx, parsed.splits);
+  const { points, splits, startMs } = built.value;
+  const fileText =
+    input.format === 'tcx'
+      ? serializeTcx(points, splits, { startMs, name })
+      : serializeGpx(points, { name });
+  // Check the file exactly as it will be downloaded.
+  const verified = verifyFile(fileText, parsed.splits);
   return {
     ...out,
     result: built.value,
-    gpx,
+    fileText,
     verification: verified.ok ? verified.value : null,
     error: verified.ok ? null : `Self-check failed: ${verified.error}`,
   };
