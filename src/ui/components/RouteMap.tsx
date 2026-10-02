@@ -108,7 +108,12 @@ export function RouteMap({
           {route && (
             <Polyline
               positions={toLatLngs(route.points)}
-              pathOptions={{ className: 'route-halo', weight: 12, opacity: 0.9, lineJoin: 'round' }}
+              pathOptions={{
+                      color: 'var(--halo)',
+                      weight: 12,
+                      opacity: 0.9,
+                      lineJoin: 'round',
+                    }}
               interactive={false}
             />
           )}
@@ -116,7 +121,11 @@ export function RouteMap({
         {route && !segments && (
           <Polyline
             positions={toLatLngs(route.points)}
-            pathOptions={{ className: 'route-plain', weight: 5, lineJoin: 'round' }}
+            pathOptions={{
+                  color: 'var(--route)',
+                  weight: 5,
+                  lineJoin: 'round',
+                }}
             interactive={false}
           />
         )}
