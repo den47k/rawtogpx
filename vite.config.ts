@@ -29,7 +29,7 @@ export default defineConfig({
       filename: 'sw.ts',
       injectRegister: false, // registered in main.tsx
       injectManifest: {
-        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,woff2}'],
       },
       manifest: {
         id: './',

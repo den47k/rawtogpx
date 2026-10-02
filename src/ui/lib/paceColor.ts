@@ -1,10 +1,11 @@
-// Diverging pace scale: faster than average -> blue, average -> neutral gray,
-// slower -> red. Poles and midpoint checked for CVD separation and >= 3:1 contrast
-// against OSM land (#f2efe9). Interpolated in OKLab so the arms stay even.
+// Diverging pace scale: faster than average -> blue, average -> neutral gray, slower ->
+// orange (the design's hues). The midpoint is darker than the design's light gray so it
+// stays visible on map tiles; all three clear 3:1 contrast on light tiles and the dark map.
+// Interpolated in OKLab so the arms stay even.
 
-export const PACE_FAST = '#1c5cab';
-export const PACE_MID = '#707070';
-export const PACE_SLOW = '#c62f2f';
+export const PACE_FAST = '#2d78bd';
+export const PACE_MID = '#80878d';
+export const PACE_SLOW = '#de602f';
 
 type Lab = [number, number, number];
 
