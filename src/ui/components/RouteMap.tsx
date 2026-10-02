@@ -156,7 +156,7 @@ export function RouteMap({
               <Polyline
                 positions={toLatLngs(hot.points)}
                 pathOptions={{
-                  className: 'route-halo',
+                  color: 'var(--halo)',
                   weight: 16,
                   lineCap: 'round',
                   lineJoin: 'round',
@@ -202,13 +202,22 @@ export function RouteMap({
               <CircleMarker
                 center={[first.lat, first.lon]}
                 radius={11}
-                pathOptions={{ className: 'marker-ring', weight: 2 }}
+                pathOptions={{
+                  color: 'var(--ink)',
+                  fill: false,
+                  weight: 2,
+                }}
                 interactive={false}
               />
               <CircleMarker
                 center={[first.lat, first.lon]}
                 radius={6}
-                pathOptions={{ className: 'marker-dot', weight: 2, fillOpacity: 1 }}
+                pathOptions={{
+                  color: 'var(--halo)',
+                  fillColor: 'var(--ink)',
+                  fillOpacity: 1,
+                  weight: 2,
+                }}
               >
                 <Tooltip direction="left" offset={[-12, 0]}>
                   {loop ? 'Start / finish' : 'Start'}
@@ -220,7 +229,12 @@ export function RouteMap({
             <CircleMarker
               center={[last.lat, last.lon]}
               radius={6}
-              pathOptions={{ className: 'marker-dot', weight: 2, fillOpacity: 1 }}
+              pathOptions={{
+                color: 'var(--halo)',
+                fillColor: 'var(--ink)',
+                fillOpacity: 1,
+                weight: 2,
+              }}
             >
               <Tooltip direction="left" offset={[-8, 0]}>
                 Finish

@@ -226,21 +226,7 @@ dialog::backdrop {
 .leaflet-tooltip-right::before {
   display: none;
 }
-/* Map paths take theme colours via classes (SVG attributes can't use CSS variables). */
-.route-halo {
-  stroke: var(--halo);
-}
-.route-plain {
-  stroke: var(--route);
-}
-.marker-ring {
-  stroke: var(--ink);
-  fill: none;
-}
-.marker-dot {
-  stroke: var(--halo);
-  fill: var(--ink);
-}
+
 .map-picking .leaflet-container {
   cursor: crosshair;
 }
