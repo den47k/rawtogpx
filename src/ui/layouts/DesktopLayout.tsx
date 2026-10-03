@@ -11,7 +11,8 @@ import {
   TimeBody,
 } from '../components/sections.tsx';
 import { SplitCheckTable } from '../components/SplitCheck.tsx';
-import { Logo, Section } from '../components/ui.tsx';
+import { Logo, Section, ThemeButton } from '../components/ui.tsx';
+import type { ThemeControl } from '../hooks/useTheme.ts';
 import { btnLink, monoMeta } from '../lib/styles.ts';
 import { localTimeZone } from '../lib/datetime.ts';
 import type { Rebuilder } from '../useRebuilder.ts';
@@ -19,10 +20,12 @@ import type { Rebuilder } from '../useRebuilder.ts';
 /** ≥ 768 px: inputs sidebar with a fixed download footer; map over the split check. */
 export function DesktopLayout({
   r,
+  theme,
   openBuilder,
   openSaved,
 }: {
   r: Rebuilder;
+  theme: ThemeControl;
   openBuilder: () => void;
   openSaved: () => void;
 }) {
@@ -32,6 +35,10 @@ export function DesktopLayout({
       <header className="flex h-[52px] items-center gap-3.5 border-b border-line bg-panel px-4">
         <Logo />
         <h1 className="m-0 text-sm font-semibold tracking-[-0.01em]">GPX Rebuilder</h1>
+        <ThemeButton
+          theme={theme}
+          className="ml-auto h-8 w-8 rounded-md border border-border2 bg-surface text-muted3 hover:bg-chip hover:text-ink"
+        />
       </header>
 
       <div className="grid min-h-0 grid-cols-[minmax(340px,420px)_minmax(0,1fr)]">

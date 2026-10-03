@@ -1,4 +1,6 @@
 import { useId, type ReactNode } from 'react';
+import type { ThemeControl } from '../hooks/useTheme.ts';
+import { nextThemePref, type ThemePref } from '../lib/theme.ts';
 
 interface Option<T extends string> {
   value: T;
@@ -152,5 +154,56 @@ export function Logo({ size = 22 }: { size?: number }) {
       <rect width="512" height="512" rx="139.6" fill="#ea580c" />
       <circle cx="256" cy="256" r="69.8" fill="none" stroke="#fff" strokeWidth="46.5" />
     </svg>
+  );
+}
+
+const THEME_LABEL: Record<ThemePref, string> = {
+  system: 'System',
+  light: 'Light',
+  dark: 'Dark',
+};
+
+/** 16 px line icons for the theme button: monitor, sun, moon. */
+const THEME_ICON: Record<ThemePref, ReactNode> = {
+  system: (
+    <>
+      <rect x="2" y="3" width="12" height="8.5" rx="1.5" />
+      <path d="M5.5 14h5M8 11.5V14" />
+    </>
+  ),
+  light: (
+    <>
+      <circle cx="8" cy="8" r="2.75" />
+      <path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" />
+    </>
+  ),
+  dark: <path d="M13.5 9.6A5.75 5.75 0 0 1 6.4 2.5a5.75 5.75 0 1 0 7.1 7.1Z" />,
+};
+
+/** Cycles the colour theme: system -> light -> dark. Shows the current choice. */
+export function ThemeButton({ theme, className }: { theme: ThemeControl; className: string }) {
+  const label = `Theme: ${THEME_LABEL[theme.pref]}. Switch to ${THEME_LABEL[nextThemePref(theme.pref)]}`;
+  return (
+    <button
+      type="button"
+      onClick={theme.cycle}
+      aria-label={label}
+      title={label}
+      className={`inline-flex shrink-0 cursor-pointer items-center justify-center focus-visible:ring-2 focus-visible:ring-border focus-visible:outline-none ${className}`}
+    >
+      <svg
+        aria-hidden
+        viewBox="0 0 16 16"
+        width={16}
+        height={16}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        {THEME_ICON[theme.pref]}
+      </svg>
+    </button>
   );
 }

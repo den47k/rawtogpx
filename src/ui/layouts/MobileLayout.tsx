@@ -12,7 +12,8 @@ import {
   TimeBody,
 } from '../components/sections.tsx';
 import { SplitCheckTable } from '../components/SplitCheck.tsx';
-import { Logo } from '../components/ui.tsx';
+import { Logo, ThemeButton } from '../components/ui.tsx';
+import type { ThemeControl } from '../hooks/useTheme.ts';
 import { btnLink } from '../lib/styles.ts';
 import { localTimeZone } from '../lib/datetime.ts';
 import type { Rebuilder } from '../useRebuilder.ts';
@@ -67,10 +68,12 @@ function Accordion({
 /** < 768 px: map on top, a bottom sheet of collapsible sections, sticky download bar. */
 export function MobileLayout({
   r,
+  theme,
   openBuilder,
   openSaved,
 }: {
   r: Rebuilder;
+  theme: ThemeControl;
   openBuilder: () => void;
   openSaved: () => void;
 }) {
@@ -97,9 +100,16 @@ export function MobileLayout({
     <div className="grid h-dvh grid-rows-[minmax(220px,38dvh)_minmax(0,1fr)_auto] bg-panel">
       <div className="relative isolate bg-map">
         <MapPanel r={r} showCard={false} cardClass="top-14" legendClass="bottom-7" />
-        <div className="pointer-events-none absolute top-3 left-3 z-[700] flex items-center gap-2 rounded-lg bg-panel/85 px-2.5 py-1.5 backdrop-blur">
-          <Logo size={20} />
-          <h1 className="m-0 text-sm font-semibold">GPX Rebuilder</h1>
+        <div className="pointer-events-none absolute top-3 left-3 z-[700] flex items-center gap-2">
+          <div className="flex h-8 items-center gap-2 rounded-lg bg-panel/85 px-2.5 backdrop-blur">
+            <Logo size={20} />
+            <h1 className="m-0 text-sm font-semibold">GPX Rebuilder</h1>
+          </div>
+          {/* 32 px to match the badge, with a 44 px touch area. */}
+          <ThemeButton
+            theme={theme}
+            className="pointer-events-auto relative h-8 w-8 rounded-lg bg-panel/85 text-muted3 backdrop-blur before:absolute before:-inset-1.5 before:content-['']"
+          />
         </div>
       </div>
 

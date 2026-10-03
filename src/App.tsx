@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { IntervalBuilderDialog } from './ui/components/IntervalBuilderDialog.tsx';
 import { SavedTracksDialog } from './ui/components/SavedTracksDialog.tsx';
 import { useMediaQuery } from './ui/hooks/useMediaQuery.ts';
+import { useTheme } from './ui/hooks/useTheme.ts';
 import { DesktopLayout } from './ui/layouts/DesktopLayout.tsx';
 import { MobileLayout } from './ui/layouts/MobileLayout.tsx';
 import { useRebuilder } from './ui/useRebuilder.ts';
 
 export default function App() {
   const r = useRebuilder();
+  const theme = useTheme();
   const desktop = useMediaQuery('(min-width: 768px)');
   const [dialog, setDialog] = useState<'builder' | 'saved' | null>(null);
   const openBuilder = () => setDialog('builder');
@@ -17,9 +19,9 @@ export default function App() {
   return (
     <>
       {desktop ? (
-        <DesktopLayout r={r} openBuilder={openBuilder} openSaved={openSaved} />
+        <DesktopLayout r={r} theme={theme} openBuilder={openBuilder} openSaved={openSaved} />
       ) : (
-        <MobileLayout r={r} openBuilder={openBuilder} openSaved={openSaved} />
+        <MobileLayout r={r} theme={theme} openBuilder={openBuilder} openSaved={openSaved} />
       )}
 
       <IntervalBuilderDialog
