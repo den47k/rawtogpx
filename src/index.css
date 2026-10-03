@@ -230,6 +230,9 @@ dialog::backdrop {
 .map-picking .leaflet-container {
   cursor: crosshair;
 }
+.map-probing .leaflet-container {
+  cursor: pointer;
+}
 .rest-marker {
   display: flex;
   align-items: center;

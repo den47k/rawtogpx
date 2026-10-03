@@ -96,7 +96,7 @@ export function MobileLayout({
   return (
     <div className="grid h-dvh grid-rows-[minmax(220px,38dvh)_minmax(0,1fr)_auto] bg-panel">
       <div className="relative isolate bg-map">
-        <MapPanel r={r} showCard={false} legendClass="bottom-7" />
+        <MapPanel r={r} showCard={false} cardClass="top-14" legendClass="bottom-7" />
         <div className="pointer-events-none absolute top-3 left-3 z-[700] flex items-center gap-2 rounded-lg bg-panel/85 px-2.5 py-1.5 backdrop-blur">
           <Logo size={20} />
           <h1 className="m-0 text-sm font-semibold">GPX Rebuilder</h1>

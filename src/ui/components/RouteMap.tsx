@@ -1,5 +1,5 @@
 import 'leaflet/dist/leaflet.css';
-import { divIcon, latLngBounds, type LatLngExpression } from 'leaflet';
+import { divIcon, latLngBounds, type LatLng, type LatLngExpression } from 'leaflet';
 import { useEffect, useRef } from 'react';
 import {
   CircleMarker,
@@ -14,6 +14,8 @@ import {
   ZoomControl,
 } from 'react-leaflet';
 import { formatDuration } from '../../core/format.ts';
+import { pointAtDistance } from '../../core/geo.ts';
+import { snapToPolyline, type XY } from '../../core/probe.ts';
 import type { SplitSegment } from '../../core/segments.ts';
 import type { PreparedRoute, RoutePoint } from '../../core/types.ts';
 import type { PaceScale } from '../lib/paceColor.ts';
@@ -29,7 +31,14 @@ interface RouteMapProps {
   /** The hovered (or tapped) split segment index, for the hover card. */
   hovered: number | null;
   onHover: (index: number | null) => void;
+  /** Distance along `route` of the probed (hovered or tapped) point, metres. */
+  probeM: number | null;
+  onProbe: (distanceM: number | null) => void;
 }
+
+/** How close the pointer must be to the route to probe it, in pixels. */
+const HOVER_TOLERANCE_PX = 14;
+const TAP_TOLERANCE_PX = 24;
 
 const REST_ICON = divIcon({ className: 'rest-marker', html: 'R', iconSize: [22, 22] });
 const REST_ICON_HOT = divIcon({ className: 'rest-marker', html: 'R', iconSize: [30, 30] });
@@ -62,6 +71,59 @@ function ClickToPick({ onPick }: { onPick: (lat: number, lon: number) => void })
   return null;
 }
 
+/**
+ * Snap the pointer to the route and report the distance along it. Route pixels are cached
+ * per zoom level (absolute pixel coordinates don't change on pan).
+ */
+function RouteProbe({
+  route,
+  probeM,
+  onProbe,
+}: {
+  route: PreparedRoute;
+  probeM: number | null;
+  onProbe: (distanceM: number | null) => void;
+}) {
+  const map = useMap();
+  const cache = useRef<{ route: PreparedRoute; zoom: number; xy: XY[] } | null>(null);
+  const last = useRef(probeM);
+  useEffect(() => {
+    last.current = probeM;
+  });
+
+  const probe = (latlng: LatLng, tolerancePx: number) => {
+    const zoom = map.getZoom();
+    if (cache.current?.route !== route || cache.current.zoom !== zoom) {
+      cache.current = {
+        route,
+        zoom,
+        xy: route.points.map((p) => map.project([p.lat, p.lon], zoom)),
+      };
+    }
+    const d = snapToPolyline(
+      cache.current.xy,
+      route.cum,
+      map.project(latlng, zoom),
+      tolerancePx,
+      last.current ?? undefined,
+    );
+    if (d === last.current) return;
+    last.current = d;
+    onProbe(d);
+  };
+
+  useMapEvents({
+    mousemove: (e) => probe(e.latlng, HOVER_TOLERANCE_PX),
+    click: (e) => probe(e.latlng, TAP_TOLERANCE_PX),
+    mouseout: () => {
+      if (last.current === null) return;
+      last.current = null;
+      onProbe(null);
+    },
+  });
+  return null;
+}
+
 /** Leaflet caches its container size; tell it when the layout resizes the map. */
 function TrackContainerSize() {
   const map = useMap();
@@ -81,7 +143,10 @@ export function RouteMap({
   onPick,
   hovered,
   onHover,
+  probeM,
+  onProbe,
 }: RouteMapProps) {
+  const probePoint = route && probeM !== null ? pointAtDistance(route, probeM) : null;
   const hot = hovered === null ? undefined : segments?.find((s) => s.index === hovered);
   const first = route?.points[0];
   const last = route?.points[route.points.length - 1];
@@ -91,7 +156,7 @@ export function RouteMap({
     Math.abs(first.lat - last.lat) + Math.abs(first.lon - last.lon) < 2e-4;
 
   return (
-    <div className={`h-full w-full ${onPick ? 'map-picking' : ''}`}>
+    <div className={`h-full w-full ${onPick ? 'map-picking' : probePoint ? 'map-probing' : ''}`}>
       <MapContainer center={[30, 10]} zoom={2} zoomControl={false} className="h-full w-full">
         <TileLayer
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -102,6 +167,7 @@ export function RouteMap({
         <FitBounds route={route} fitKey={fitKey} />
         <TrackContainerSize />
         {onPick && <ClickToPick onPick={onPick} />}
+        {route && !onPick && <RouteProbe route={route} probeM={probeM} onProbe={onProbe} />}
 
         {/* Panes fix stacking regardless of render order: halo < route (400) < markers. */}
         <Pane name="casing" style={{ zIndex: 390 }}>
@@ -109,11 +175,11 @@ export function RouteMap({
             <Polyline
               positions={toLatLngs(route.points)}
               pathOptions={{
-                      color: 'var(--halo)',
-                      weight: 12,
-                      opacity: 0.9,
-                      lineJoin: 'round',
-                    }}
+                color: 'var(--halo)',
+                weight: 12,
+                opacity: 0.9,
+                lineJoin: 'round',
+              }}
               interactive={false}
             />
           )}
@@ -122,10 +188,10 @@ export function RouteMap({
           <Polyline
             positions={toLatLngs(route.points)}
             pathOptions={{
-                  color: 'var(--route)',
-                  weight: 5,
-                  lineJoin: 'round',
-                }}
+              color: 'var(--route)',
+              weight: 5,
+              lineJoin: 'round',
+            }}
             interactive={false}
           />
         )}
@@ -141,11 +207,7 @@ export function RouteMap({
                 lineCap: 'round',
                 lineJoin: 'round',
               }}
-              eventHandlers={{
-                mouseover: () => onHover(s.index),
-                mouseout: () => onHover(null),
-                click: () => onHover(s.index),
-              }}
+              interactive={false}
             />
           ))}
 
@@ -174,6 +236,22 @@ export function RouteMap({
                 interactive={false}
               />
             </>
+          )}
+        </Pane>
+
+        <Pane name="probe" style={{ zIndex: 440 }}>
+          {probePoint && (
+            <CircleMarker
+              center={[probePoint.lat, probePoint.lon]}
+              radius={6}
+              pathOptions={{
+                color: 'var(--ink)',
+                fillColor: 'var(--halo)',
+                fillOpacity: 1,
+                weight: 3,
+              }}
+              interactive={false}
+            />
           )}
         </Pane>
 
