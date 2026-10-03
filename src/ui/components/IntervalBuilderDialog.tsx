@@ -18,15 +18,12 @@ function EachInputs({
   values,
   onChange,
   label,
-  plural,
   placeholder,
 }: {
   count: number;
   values: string[];
   onChange: (values: string[]) => void;
-  /** Singular noun for input labels ("Rep"), plural for the hint ("reps"). */
   label: string;
-  plural: string;
   placeholder: string;
 }) {
   const hintId = useId();
@@ -217,7 +214,6 @@ export function IntervalBuilderDialog({
               values={repList}
               onChange={setRepList}
               label="Rep"
-              plural="reps"
               placeholder={repKind === 'pace' ? '3:20' : '1:20'}
             />
           )}
@@ -287,7 +283,6 @@ export function IntervalBuilderDialog({
                   values={recList}
                   onChange={setRecList}
                   label="Recovery"
-                  plural="recoveries"
                   placeholder={rec === 'stand' ? '1:30' : '1:00'}
                 />
               )}
