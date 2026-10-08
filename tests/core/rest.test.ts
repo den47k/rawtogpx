@@ -81,13 +81,25 @@ describe('rests in the time model and rebuild', () => {
   ];
 
   it('holds distance while time advances', () => {
-    const m = createTimeModel(splits);
+    const m = createTimeModel(splits, 0);
     expect(m.distanceAt(300)).toBe(1000);
     expect(m.distanceAt(350)).toBe(1000);
     expect(m.distanceAt(390)).toBe(1000);
     expect(m.distanceAt(540)).toBe(1500);
     expect(m.timeAt(1000)).toBe(390); // leaves the rest spot
     expect(m.timeAt(500)).toBe(150);
+  });
+
+  it('with easing, stops abruptly and pulls away gradually', () => {
+    const m = createTimeModel(splits);
+    expect(m.distanceAt(300)).toBeCloseTo(1000, 9);
+    expect(m.distanceAt(350)).toBe(1000);
+    expect(m.timeAt(1000)).toBe(390);
+    // Arriving: full speed up to the stop.
+    expect(1000 - m.distanceAt(299)).toBeCloseTo(1000 / 300, 6);
+    // Leaving: slower than the steady pace for the first seconds.
+    expect(m.distanceAt(391) - 1000).toBeLessThan(m.distanceAt(500) - m.distanceAt(499));
+    expect(m.distanceAt(690)).toBeCloseTo(2000, 9);
   });
 
   it('handles a trailing rest', () => {

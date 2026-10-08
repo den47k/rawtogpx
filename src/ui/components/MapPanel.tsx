@@ -1,17 +1,18 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { formatDuration, formatPace } from '../../core/format.ts';
 import { probeRoute } from '../../core/probe.ts';
 import type { PreparedRoute } from '../../core/types.ts';
+import { useMediaQuery } from '../hooks/useMediaQuery.ts';
 import { formatClock } from '../lib/datetime.ts';
 import { divergingColor } from '../lib/paceColor.ts';
 import { formatTableDistance } from '../lib/checkRows.ts';
 import { fmtCenter, type Rebuilder } from '../useRebuilder.ts';
-import { RouteMap } from './RouteMap.tsx';
+import { RouteMap, type MapProbe } from './RouteMap.tsx';
 
 const GRADIENT = `linear-gradient(90deg, ${[-1, -0.5, 0, 0.5, 1].map(divergingColor).join(', ')})`;
 
 const cardCls =
-  'pointer-events-none absolute left-3 z-[600] flex flex-col gap-1 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-[0_4px_16px_rgba(20,28,38,.06)]';
+  'absolute left-3 z-[600] flex flex-col gap-1 rounded-lg border border-line bg-surface px-3 py-2.5 shadow-[0_4px_16px_rgba(20,28,38,.06)]';
 
 const signed = (n: number, digits: number): string =>
   `${n > 0 ? '+' : n < 0 ? '−' : '±'}${Math.abs(n).toFixed(digits)}`;
@@ -40,34 +41,53 @@ export function MapPanel({
   const delta = seg && !seg.rest && avg !== undefined ? Math.round(seg.paceSPerKm - avg) : null;
 
   // The probed point is tied to the route it was measured on; a new route drops it.
-  const [probe, setProbe] = useState<{ route: PreparedRoute; d: number } | null>(null);
-  const probeM = probe && probe.route === mapRoute ? probe.d : null;
+  const [probe, setProbe] = useState<(MapProbe & { route: PreparedRoute }) | null>(null);
+  const live = probe && probe.route === mapRoute ? probe : null;
+  const probeM = live?.distanceM ?? null;
+  const touch = useMediaQuery('(pointer: coarse)');
+  const placedSplits = result?.route === mapRoute ? result?.splits : undefined;
   const stats = useMemo(
-    () =>
-      probeM === null || !mapRoute
-        ? null
-        : probeRoute(mapRoute, probeM, result?.route === mapRoute ? result.splits : undefined),
-    [probeM, mapRoute, result],
+    () => (probeM === null || !mapRoute ? null : probeRoute(mapRoute, probeM, placedSplits)),
+    [probeM, mapRoute, placedSplits],
   );
-  const probeSeg =
-    stats?.splitIndex === undefined
-      ? undefined
-      : r.segments?.find((s) => s.index === stats.splitIndex);
+  // Where the route passes this spot more than once (loops, laps, out-and-back), all passes.
+  const passes = useMemo(
+    () =>
+      !live || !mapRoute || live.passes.length < 2
+        ? []
+        : live.passes.map((d) => ({
+            ...probeRoute(mapRoute, d, placedSplits),
+            active: d === live.distanceM,
+          })),
+    [live, mapRoute, placedSplits],
+  );
+  const segFor = (index: number | undefined) =>
+    index === undefined ? undefined : r.segments?.find((s) => s.index === index);
+  const segName = (s: { label?: string; index: number }) => s.label ?? `Split ${s.index + 1}`;
+  const probeSeg = segFor(stats?.splitIndex);
 
   // Highlight the probed split (map and table), only when it changes so a rest marker's
   // own hover isn't overridden while the pointer sits on it.
   const lastSplit = useRef<number | null>(null);
-  const onProbe = (d: number | null) => {
-    setProbe(d === null || !mapRoute ? null : { route: mapRoute, d });
+  const onProbe = (next: MapProbe | null) => {
+    setProbe(next === null || !mapRoute ? null : { ...next, route: mapRoute });
     const split =
-      d === null || !mapRoute || result?.route !== mapRoute
+      next === null || !mapRoute || !placedSplits
         ? null
-        : (probeRoute(mapRoute, d, result.splits).splitIndex ?? null);
+        : (probeRoute(mapRoute, next.distanceM, placedSplits).splitIndex ?? null);
     if (split !== lastSplit.current) {
       lastSplit.current = split;
       r.setHoveredSplit(split);
     }
   };
+
+  // On touch screens a second tap on the route would zoom (double tap); tap the card instead.
+  const cyclePass = () => {
+    if (!live || live.passes.length < 2) return;
+    const i = live.passes.indexOf(live.distanceM);
+    onProbe({ ...live, distanceM: live.passes[(i + 1) % live.passes.length]! });
+  };
+  const tapToSwitch = touch && passes.length > 1;
 
   const probeRows: { k: string; v: string; sub?: string }[] = [];
   if (stats) {
@@ -127,10 +147,23 @@ export function MapPanel({
       )}
 
       {!placing && stats && (
-        <div className={`${cardClass} ${cardCls}`}>
+        <div
+          className={`${cardClass} ${cardCls} ${tapToSwitch ? 'cursor-pointer' : 'pointer-events-none'}`}
+          {...(tapToSwitch && {
+            role: 'button',
+            tabIndex: 0,
+            'aria-label': 'Show the next pass here',
+            onClick: cyclePass,
+            onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              cyclePass();
+            },
+          })}
+        >
           <div className="text-[11px] text-muted">
             {probeSeg
-              ? `${probeSeg.label ?? `Split ${probeSeg.index + 1}`} · ${formatTableDistance(probeSeg.fromM)}–${formatTableDistance(probeSeg.toM)}`
+              ? `${segName(probeSeg)} · ${formatTableDistance(probeSeg.fromM)}–${formatTableDistance(probeSeg.toM)}`
               : `Route · ${formatTableDistance(mapRoute?.lengthM ?? 0)}`}
           </div>
           <dl className="m-0 grid grid-cols-[repeat(3,auto)] gap-x-4 gap-y-1.5">
@@ -146,11 +179,40 @@ export function MapPanel({
               </div>
             ))}
           </dl>
+          {passes.length > 1 && (
+            <div className="mt-1 flex flex-col gap-1 border-t border-line2 pt-2">
+              <div className="text-[11px] text-muted">
+                Passes here · {touch ? 'tap card' : 'click route'} to switch
+              </div>
+              <ol className="m-0 grid list-none grid-cols-[auto_auto_auto_1fr] items-center gap-x-3 gap-y-0.5 p-0 font-mono text-xs">
+                {passes.map((pass, i) => {
+                  const s = segFor(pass.splitIndex);
+                  return (
+                    <li
+                      key={i}
+                      aria-current={pass.active || undefined}
+                      className={`contents ${pass.active ? 'font-medium text-ink' : 'text-muted'}`}
+                    >
+                      <span
+                        aria-hidden
+                        className={`h-1.5 w-1.5 rounded-full ${pass.active ? 'bg-ink' : 'bg-transparent'}`}
+                      />
+                      <span>{formatTableDistance(pass.distanceM)}</span>
+                      <span>
+                        {pass.elapsedS === undefined ? '' : formatDuration(pass.elapsedS)}
+                      </span>
+                      <span className="truncate font-sans">{s ? segName(s) : ''}</span>
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          )}
         </div>
       )}
 
       {showCard && !placing && !stats && seg && (
-        <div className={`${cardClass} ${cardCls} min-w-[170px]`}>
+        <div className={`${cardClass} ${cardCls} pointer-events-none min-w-[170px]`}>
           <div className="text-[11px] text-muted">
             {seg.rest
               ? `Rest · at ${formatTableDistance(seg.fromM)}`
@@ -169,7 +231,8 @@ export function MapPanel({
         </div>
       )}
 
-      {r.segments && r.scale && (
+      {/* On a phone the short map can't fit both; the tapped point's card wins until cleared. */}
+      {r.segments && r.scale && !(touch && stats && !placing) && (
         <div
           className={`pointer-events-none absolute left-3 z-[600] ${legendClass} flex items-center gap-2 rounded-md border border-line bg-surface px-2.5 py-1.5 text-[11px] text-muted3`}
         >

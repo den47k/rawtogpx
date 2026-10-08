@@ -26,40 +26,75 @@ export interface RouteProbe {
   splitIndex?: number;
 }
 
+/** One pass of the route near a point: where along the route, and how far off (planar). */
+export interface PolylinePass {
+  distanceM: number;
+  dist: number;
+}
+
 /**
- * Snap `p` to the polyline `xy` (planar, e.g. map pixels) and return the route distance of
- * the nearest point, using `cum` (metres at each vertex). Null if nothing is within
- * `maxDist`. Where the route passes the same spot more than once (laps on a track), any pass
- * within `tieDist` of the nearest counts, and the one closest to `nearM` wins.
+ * Every separate pass of the polyline `xy` (planar, e.g. map pixels) near `p`, sorted by
+ * route distance (`cum`, metres at each vertex), each at its closest point. A line passing
+ * through the circle of radius `maxDist` runs at most about that far inside it beyond its
+ * closest point, so a point in reach more than 1.5 times that further along the line is another
+ * pass (a loop's start and finish, laps, an out-and-back), even if the line never left the
+ * circle in between. Passes more than `bandDist` farther than the nearest are left out:
+ * they are a neighbouring line, not the same one drawn again.
  */
-export function snapToPolyline(
+export function polylinePasses(
   xy: readonly XY[],
   cum: readonly number[],
   p: XY,
   maxDist: number,
-  nearM?: number,
-  tieDist = 2,
-): number | null {
-  const hits: { dist: number; d: number }[] = [];
+  bandDist = 6,
+): PolylinePass[] {
   if (xy.length === 1) {
     const dist = Math.hypot(p.x - xy[0]!.x, p.y - xy[0]!.y);
-    return dist <= maxDist ? 0 : null;
+    return dist <= maxDist ? [{ distanceM: 0, dist }] : [];
   }
+  const passes: PolylinePass[] = [];
+  let current: PolylinePass | null = null;
+  let along = 0; // line length up to the current segment's start
+  let bestAlong = 0; // where along the line the current pass's closest point is
   for (let i = 0; i + 1 < xy.length; i++) {
     const a = xy[i]!;
     const b = xy[i + 1]!;
     const dx = b.x - a.x;
     const dy = b.y - a.y;
-    const len2 = dx * dx + dy * dy;
-    const f = len2 > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2)) : 0;
+    const len = Math.hypot(dx, dy);
+    const f =
+      len > 0 ? Math.min(1, Math.max(0, ((p.x - a.x) * dx + (p.y - a.y) * dy) / len ** 2)) : 0;
     const dist = Math.hypot(p.x - (a.x + f * dx), p.y - (a.y + f * dy));
-    if (dist <= maxDist) hits.push({ dist, d: cum[i]! + f * (cum[i + 1]! - cum[i]!) });
+    const here = along + f * len;
+    along += len;
+    if (dist > maxDist) continue;
+    if (current && here - bestAlong > 1.5 * maxDist) current = null;
+    const hit = { distanceM: cum[i]! + f * (cum[i + 1]! - cum[i]!), dist };
+    if (current && dist >= current.dist) continue;
+    if (current) Object.assign(current, hit);
+    else passes.push((current = hit));
+    bestAlong = here;
   }
-  if (hits.length === 0) return null;
-  const min = Math.min(...hits.map((h) => h.dist));
-  const close = hits.filter((h) => h.dist <= min + tieDist);
-  if (nearM === undefined) return close.reduce((best, h) => (h.dist < best.dist ? h : best)).d;
-  return close.reduce((best, h) => (Math.abs(h.d - nearM) < Math.abs(best.d - nearM) ? h : best)).d;
+  if (passes.length === 0) return [];
+  const nearest = Math.min(...passes.map((h) => h.dist));
+  return passes.filter((h) => h.dist <= nearest + bandDist);
+}
+
+/**
+ * Which pass to show: the one closest along the route to `nearM` (the previous one, so
+ * moving along a lap stays on it), else the one nearest the pointer.
+ */
+export function pickPass(passes: readonly PolylinePass[], nearM?: number): number {
+  let best = 0;
+  passes.forEach((h, i) => {
+    const b = passes[best]!;
+    const better =
+      nearM === undefined
+        ? h.dist < b.dist
+        : Math.abs(h.distanceM - nearM) < Math.abs(b.distanceM - nearM);
+    if (better) best = i;
+  });
+  return best;
 }
 
 /** Ascent (sum of rises) from the route start to distance `d`, metres. */

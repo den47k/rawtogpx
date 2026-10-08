@@ -15,7 +15,7 @@ import {
 } from 'react-leaflet';
 import { formatDuration } from '../../core/format.ts';
 import { pointAtDistance } from '../../core/geo.ts';
-import { snapToPolyline, type XY } from '../../core/probe.ts';
+import { pickPass, polylinePasses, type XY } from '../../core/probe.ts';
 import type { SplitSegment } from '../../core/segments.ts';
 import type { PreparedRoute, RoutePoint } from '../../core/types.ts';
 import type { PaceScale } from '../lib/paceColor.ts';
@@ -33,7 +33,13 @@ interface RouteMapProps {
   onHover: (index: number | null) => void;
   /** Distance along `route` of the probed (hovered or tapped) point, metres. */
   probeM: number | null;
-  onProbe: (distanceM: number | null) => void;
+  onProbe: (probe: MapProbe | null) => void;
+}
+
+/** The probed point: the pass shown (`distanceM`) and every pass of the route there. */
+export interface MapProbe {
+  distanceM: number;
+  passes: number[];
 }
 
 /** How close the pointer must be to the route to probe it, in pixels. */
@@ -72,8 +78,9 @@ function ClickToPick({ onPick }: { onPick: (lat: number, lon: number) => void })
 }
 
 /**
- * Snap the pointer to the route and report the distance along it. Route pixels are cached
- * per zoom level (absolute pixel coordinates don't change on pan).
+ * Snap the pointer to the route and report every pass of it there. Moving keeps to the same
+ * pass; clicking (or tapping the same spot again) switches to the next one. Route pixels are
+ * cached per zoom level (absolute pixel coordinates don't change on pan).
  */
 function RouteProbe({
   route,
@@ -82,16 +89,36 @@ function RouteProbe({
 }: {
   route: PreparedRoute;
   probeM: number | null;
-  onProbe: (distanceM: number | null) => void;
+  onProbe: (probe: MapProbe | null) => void;
 }) {
   const map = useMap();
   const cache = useRef<{ route: PreparedRoute; zoom: number; xy: XY[] } | null>(null);
   const last = useRef(probeM);
+  const lastPt = useRef<XY | null>(null);
+  const lastTouch = useRef(-Infinity);
   useEffect(() => {
     last.current = probeM;
   });
 
-  const probe = (latlng: LatLng, tolerancePx: number) => {
+  // Browsers wrap a tap in synthetic mouse events (a mousemove before, a mouseout after);
+  // they mustn't count as hovering. Tapping off the route clears instead.
+  useEffect(() => {
+    const el = map.getContainer();
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') lastTouch.current = e.timeStamp;
+    };
+    el.addEventListener('pointerdown', onDown, true);
+    return () => el.removeEventListener('pointerdown', onDown, true);
+  }, [map]);
+
+  const clear = () => {
+    lastPt.current = null;
+    if (last.current === null) return;
+    last.current = null;
+    onProbe(null);
+  };
+
+  const probe = (latlng: LatLng, tolerancePx: number, cycle: boolean) => {
     const zoom = map.getZoom();
     if (cache.current?.route !== route || cache.current.zoom !== zoom) {
       cache.current = {
@@ -100,25 +127,29 @@ function RouteProbe({
         xy: route.points.map((p) => map.project([p.lat, p.lon], zoom)),
       };
     }
-    const d = snapToPolyline(
-      cache.current.xy,
-      route.cum,
-      map.project(latlng, zoom),
-      tolerancePx,
-      last.current ?? undefined,
-    );
-    if (d === last.current) return;
+    const pt = map.project(latlng, zoom);
+    const prevPt = lastPt.current;
+    const passes = polylinePasses(cache.current.xy, route.cum, pt, tolerancePx);
+    if (passes.length === 0) return clear();
+    lastPt.current = pt;
+    let i = pickPass(passes, last.current ?? undefined);
+    const samePlace =
+      prevPt !== null && Math.hypot(pt.x - prevPt.x, pt.y - prevPt.y) <= tolerancePx;
+    if (cycle && samePlace && last.current !== null) i = (i + 1) % passes.length;
+    const d = passes[i]!.distanceM;
+    if (d === last.current && !cycle) return;
     last.current = d;
-    onProbe(d);
+    onProbe({ distanceM: d, passes: passes.map((h) => h.distanceM) });
   };
 
+  const fromTouch = (e: Event) => e.timeStamp - lastTouch.current < 800;
   useMapEvents({
-    mousemove: (e) => probe(e.latlng, HOVER_TOLERANCE_PX),
-    click: (e) => probe(e.latlng, TAP_TOLERANCE_PX),
-    mouseout: () => {
-      if (last.current === null) return;
-      last.current = null;
-      onProbe(null);
+    mousemove: (e) => {
+      if (!fromTouch(e.originalEvent)) probe(e.latlng, HOVER_TOLERANCE_PX, false);
+    },
+    click: (e) => probe(e.latlng, TAP_TOLERANCE_PX, true),
+    mouseout: (e) => {
+      if (!fromTouch(e.originalEvent)) clear();
     },
   });
   return null;
